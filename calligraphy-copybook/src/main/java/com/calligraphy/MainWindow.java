@@ -17,8 +17,11 @@ import javafx.stage.Stage;
 import java.io.File;
 import java.io.InputStream;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 主視窗（仿附圖二設計）
@@ -47,6 +50,9 @@ public class MainWindow {
     private RadioButton rbVertical;
     private TextArea textArea;
     private Label infoLabel;
+    private ComboBox<String> presetCombo;
+    private final LinkedHashMap<String, String> presets = new LinkedHashMap<>();
+    private final Set<String> userImportedFonts = new HashSet<>();
 
     // ── 預覽 ──────────────────────────────────────────────────────────
     private TabPane tabPane;
@@ -117,15 +123,22 @@ public class MainWindow {
         fontCombo = new ComboBox<>();
         List<String> fonts = getChineseFonts();
         fontCombo.getItems().addAll(fonts);
-        // 預設選第一個內嵌字體（或清單第一項）
         String defaultFont = fonts.isEmpty() ? "" : fonts.get(0);
         fontCombo.setValue(defaultFont);
         config.setFontFamily(defaultFont);
+        HBox.setHgrow(fontCombo, Priority.ALWAYS);
         fontCombo.setMaxWidth(Double.MAX_VALUE);
         fontCombo.valueProperty().addListener((o, ov, nv) -> {
-            config.setFontFamily(nv);
-            refreshPreview();
+            if (nv != null) { config.setFontFamily(nv); refreshPreview(); }
         });
+        Button btnAddFont = new Button("+");
+        btnAddFont.setTooltip(new Tooltip("匯入字型檔案"));
+        btnAddFont.setOnAction(e -> importFont());
+        Button btnRemoveFont = new Button("−");
+        btnRemoveFont.setTooltip(new Tooltip("移除已匯入的字型"));
+        btnRemoveFont.setOnAction(e -> removeFont());
+        HBox fontRow = new HBox(6, fontCombo, btnAddFont, btnRemoveFont);
+        fontRow.setAlignment(Pos.CENTER_LEFT);
 
         // 3. 字佔格比例
         Label lbRatio = sectionLabel("3. 字佔格比例");
@@ -157,6 +170,21 @@ public class MainWindow {
 
         // 5. 文字內容
         Label lbText = sectionLabel("5. 文字內容");
+        presetCombo = new ComboBox<>();
+        presetCombo.setPromptText("— 選擇已存預設 —");
+        HBox.setHgrow(presetCombo, Priority.ALWAYS);
+        presetCombo.setMaxWidth(Double.MAX_VALUE);
+        presetCombo.setOnAction(e -> {
+            String sel = presetCombo.getValue();
+            if (sel != null && presets.containsKey(sel)) {
+                textArea.setText(presets.get(sel));
+            }
+        });
+        Button btnSavePreset = new Button("儲存");
+        btnSavePreset.setTooltip(new Tooltip("把目前文字內容存為預設"));
+        btnSavePreset.setOnAction(e -> savePreset());
+        HBox presetRow = new HBox(6, presetCombo, btnSavePreset);
+        presetRow.setAlignment(Pos.CENTER_LEFT);
         textArea = new TextArea();
         textArea.setPromptText("請輸入要練習的文字...");
         textArea.setPrefRowCount(8);
@@ -174,13 +202,13 @@ public class MainWindow {
         box.getChildren().addAll(
             lbCell, cellSizeSpinner,
             new Separator(),
-            lbFont, fontCombo,
+            lbFont, fontRow,
             new Separator(),
             lbRatio, charRatioSlider, charRatioLabel,
             new Separator(),
             lbDir, rbVertical, rbHorizontal,
             new Separator(),
-            lbText, textArea,
+            lbText, presetRow, textArea,
             new Separator(),
             infoLabel
         );
@@ -367,12 +395,17 @@ public class MainWindow {
         }
         String resourcePath = PdfGenerator.BUNDLED_FONTS.get(displayName);
         if (resourcePath != null) {
-            try (InputStream is = getClass().getResourceAsStream(resourcePath)) {
+            try {
+                InputStream is = resourcePath.startsWith("file:")
+                    ? new java.io.FileInputStream(resourcePath.substring(5))
+                    : getClass().getResourceAsStream(resourcePath);
                 if (is != null) {
-                    Font loaded = Font.loadFont(is, size);
-                    if (loaded != null) {
-                        previewFontCache.put(displayName, loaded);
-                        return loaded;
+                    try (is) {
+                        Font loaded = Font.loadFont(is, size);
+                        if (loaded != null) {
+                            previewFontCache.put(displayName, loaded);
+                            return loaded;
+                        }
                     }
                 }
             } catch (Exception ignored) {}
@@ -405,5 +438,82 @@ public class MainWindow {
             alert.setContentText(ex.getMessage());
             alert.showAndWait();
         }
+    }
+
+    // ── 文字預設 ──────────────────────────────────────────────────────
+
+    private void savePreset() {
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.setTitle("儲存文字預設");
+        dialog.setHeaderText(null);
+        dialog.setContentText("請輸入預設名稱：");
+        dialog.showAndWait().ifPresent(name -> {
+            name = name.strip();
+            if (!name.isEmpty()) {
+                presets.put(name, textArea.getText());
+                if (!presetCombo.getItems().contains(name)) {
+                    presetCombo.getItems().add(name);
+                }
+                presetCombo.setValue(name);
+            }
+        });
+    }
+
+    // ── 字體匯入／移除 ────────────────────────────────────────────────
+
+    private void importFont() {
+        FileChooser fc = new FileChooser();
+        fc.setTitle("選擇字型檔案");
+        fc.getExtensionFilters().add(
+            new FileChooser.ExtensionFilter("字型檔案 (*.ttf, *.otf)", "*.ttf", "*.otf"));
+        File file = fc.showOpenDialog(stage);
+        if (file == null) return;
+
+        try (java.io.FileInputStream fis = new java.io.FileInputStream(file)) {
+            Font loaded = Font.loadFont(fis, 1.0);
+            if (loaded == null) {
+                showAlert(Alert.AlertType.ERROR, "匯入失敗", "無法載入字型，請確認檔案格式正確。");
+                return;
+            }
+            String base = file.getName().replaceFirst("\\.[^.]+$", "");
+            String name = base;
+            int n = 1;
+            while (PdfGenerator.BUNDLED_FONTS.containsKey(name) && !userImportedFonts.contains(name)) {
+                name = base + " (" + (++n) + ")";
+            }
+            PdfGenerator.BUNDLED_FONTS.put(name, "file:" + file.getAbsolutePath());
+            previewFontCache.put(name, loaded);
+            userImportedFonts.add(name);
+            if (!fontCombo.getItems().contains(name)) {
+                fontCombo.getItems().add(name);
+            }
+            fontCombo.setValue(name);
+        } catch (Exception e) {
+            showAlert(Alert.AlertType.ERROR, "匯入失敗", e.getMessage());
+        }
+    }
+
+    private void removeFont() {
+        String selected = fontCombo.getValue();
+        if (selected == null) return;
+        if (!userImportedFonts.contains(selected)) {
+            showAlert(Alert.AlertType.WARNING, "無法刪除", "只能刪除自行匯入的字型，內建字型無法移除。");
+            return;
+        }
+        PdfGenerator.BUNDLED_FONTS.remove(selected);
+        previewFontCache.remove(selected);
+        userImportedFonts.remove(selected);
+        fontCombo.getItems().remove(selected);
+        if (!fontCombo.getItems().isEmpty()) {
+            fontCombo.setValue(fontCombo.getItems().get(0));
+        }
+    }
+
+    private void showAlert(Alert.AlertType type, String title, String msg) {
+        Alert a = new Alert(type);
+        a.setTitle(title);
+        a.setHeaderText(null);
+        a.setContentText(msg);
+        a.showAndWait();
     }
 }

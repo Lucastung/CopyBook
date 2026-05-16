@@ -199,6 +199,15 @@ public class PdfGenerator {
         if (resourcePath == null) {
             throw new IOException("找不到字體：" + fontFamily + "\n請確認 resources/fonts/index.properties 設定正確。");
         }
+        if (resourcePath.startsWith("file:")) {
+            File fontFile = new File(resourcePath.substring(5));
+            if (!fontFile.exists()) {
+                throw new IOException("字體檔案不存在：" + fontFile.getAbsolutePath());
+            }
+            try (InputStream fis = new java.io.FileInputStream(fontFile)) {
+                return PDType0Font.load(doc, fis, true);
+            }
+        }
         InputStream is = PdfGenerator.class.getResourceAsStream(resourcePath);
         if (is == null) {
             throw new IOException("字體檔案不存在：" + resourcePath + "\n請將字體檔放入 src/main/resources/fonts/ 並重新編譯。");
