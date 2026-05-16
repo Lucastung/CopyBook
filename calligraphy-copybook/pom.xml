@@ -60,7 +60,7 @@
         <dependency>
           <groupId>org.openjfx</groupId><artifactId>javafx-graphics</artifactId>
           <version>${javafx.version}</version>
-          <classifier>mac</classifier><scope>provided</scope>
+          <classifier>mac</classifier><scope>compile</scope>
         </dependency>
       </dependencies>
     </profile>
@@ -73,7 +73,7 @@
         <dependency>
           <groupId>org.openjfx</groupId><artifactId>javafx-graphics</artifactId>
           <version>${javafx.version}</version>
-          <classifier>mac-aarch64</classifier><scope>provided</scope>
+          <classifier>mac-aarch64</classifier><scope>compile</scope>
         </dependency>
       </dependencies>
     </profile>
@@ -86,7 +86,7 @@
         <dependency>
           <groupId>org.openjfx</groupId><artifactId>javafx-graphics</artifactId>
           <version>${javafx.version}</version>
-          <classifier>win</classifier><scope>provided</scope>
+          <classifier>win</classifier><scope>compile</scope>
         </dependency>
       </dependencies>
     </profile>
@@ -99,7 +99,7 @@
         <dependency>
           <groupId>org.openjfx</groupId><artifactId>javafx-graphics</artifactId>
           <version>${javafx.version}</version>
-          <classifier>linux</classifier><scope>provided</scope>
+          <classifier>linux</classifier><scope>compile</scope>
         </dependency>
       </dependencies>
     </profile>
@@ -137,6 +137,7 @@
                     <exclude>META-INF/*.SF</exclude>
                     <exclude>META-INF/*.DSA</exclude>
                     <exclude>META-INF/*.RSA</exclude>
+                    <exclude>module-info.class</exclude>
                   </excludes>
                 </filter>
               </filters>
