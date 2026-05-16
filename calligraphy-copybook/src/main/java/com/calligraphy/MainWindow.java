@@ -62,9 +62,10 @@ public class MainWindow {
     private final LinkedHashMap<String, String> presets = new LinkedHashMap<>();
     private final Set<String> userImportedFonts = new HashSet<>();
 
-    private static final Path APP_DIR     = Path.of(System.getProperty("user.home"), ".calligraphy");
-    private static final Path FONTS_FILE  = APP_DIR.resolve("fonts.properties");
-    private static final Path PRESETS_FILE = APP_DIR.resolve("presets.properties");
+    private static final Path APP_DIR      = Path.of(System.getProperty("user.home"), ".calligraphy");
+    private static final Path FONTS_DIR    = APP_DIR.resolve("fonts");
+    private static final Path FONTS_FILE   = APP_DIR.resolve("fonts.properties");
+    private static final Path PRESETS_FILE = APP_DIR.resolve("presets.json");
 
     // ── 預覽 ──────────────────────────────────────────────────────────
     private TabPane tabPane;
@@ -506,7 +507,12 @@ public class MainWindow {
             while (PdfGenerator.BUNDLED_FONTS.containsKey(name) && !userImportedFonts.contains(name)) {
                 name = base + " (" + (++n) + ")";
             }
-            PdfGenerator.BUNDLED_FONTS.put(name, "file:" + file.getAbsolutePath());
+            // 將字型檔案複製到 ~/.calligraphy/fonts/
+            try { Files.createDirectories(FONTS_DIR); } catch (Exception ignored) {}
+            String ext = file.getName().contains(".") ? file.getName().substring(file.getName().lastIndexOf(".")) : ".ttf";
+            Path dest = FONTS_DIR.resolve(name + ext);
+            Files.copy(file.toPath(), dest, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            PdfGenerator.BUNDLED_FONTS.put(name, "file:" + dest.toAbsolutePath());
             previewFontCache.put(name, loaded);
             userImportedFonts.add(name);
             if (!fontCombo.getItems().contains(name)) {
@@ -534,6 +540,11 @@ public class MainWindow {
             fontCombo.setValue(fontCombo.getItems().get(0));
         }
         persistFonts();
+        // 同步刪除 ~/.calligraphy/fonts/ 中的副本
+        try {
+            Files.list(FONTS_DIR).filter(p -> p.getFileName().toString().startsWith(selected + "."))
+                .forEach(p -> { try { Files.deleteIfExists(p); } catch (Exception ignored) {} });
+        } catch (Exception ignored) {}
     }
 
     private void showAlert(Alert.AlertType type, String title, String msg) {
@@ -547,7 +558,7 @@ public class MainWindow {
     // ── 持久化儲存 ────────────────────────────────────────────────────
 
     private void loadPersistedData() {
-        try { Files.createDirectories(APP_DIR); } catch (Exception ignored) {}
+        try { Files.createDirectories(FONTS_DIR); } catch (Exception ignored) {}
 
         // 還原匯入字型
         if (Files.exists(FONTS_FILE)) {
@@ -575,17 +586,21 @@ public class MainWindow {
 
         // 還原文字預設
         if (Files.exists(PRESETS_FILE)) {
-            Properties p = new Properties();
-            try (Reader r = Files.newBufferedReader(PRESETS_FILE, StandardCharsets.UTF_8)) { p.load(r); }
-            catch (Exception ignored) {}
-            int count = Integer.parseInt(p.getProperty("count", "0"));
-            for (int i = 0; i < count; i++) {
-                String name = p.getProperty("preset." + i + ".name");
-                String text = p.getProperty("preset." + i + ".text", "");
-                if (name == null) continue;
-                presets.put(name, text);
-                if (!presetCombo.getItems().contains(name)) presetCombo.getItems().add(name);
-            }
+            try {
+                String json = Files.readString(PRESETS_FILE, StandardCharsets.UTF_8).trim();
+                // 手動解析 [{"name":"...","text":"..."},...]
+                json = json.replaceAll("^\\[", "").replaceAll("\\]$", "").trim();
+                if (!json.isEmpty()) {
+                    for (String entry : splitJsonObjects(json)) {
+                        String name = jsonString(entry, "name");
+                        String text = jsonString(entry, "text");
+                        if (name != null) {
+                            presets.put(name, text != null ? text : "");
+                            if (!presetCombo.getItems().contains(name)) presetCombo.getItems().add(name);
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
         }
     }
 
@@ -612,16 +627,68 @@ public class MainWindow {
     private void persistPresets() {
         try {
             Files.createDirectories(APP_DIR);
-            Properties p = new Properties();
+            StringBuilder sb = new StringBuilder("[\n");
             List<String> names = new ArrayList<>(presets.keySet());
-            p.setProperty("count", String.valueOf(names.size()));
             for (int i = 0; i < names.size(); i++) {
-                p.setProperty("preset." + i + ".name", names.get(i));
-                p.setProperty("preset." + i + ".text", presets.get(names.get(i)));
+                sb.append("  {")
+                  .append("\"name\":").append(jsonEscape(names.get(i))).append(",")
+                  .append("\"text\":").append(jsonEscape(presets.get(names.get(i))))
+                  .append("}");
+                if (i < names.size() - 1) sb.append(",");
+                sb.append("\n");
             }
-            try (Writer w = Files.newBufferedWriter(PRESETS_FILE, StandardCharsets.UTF_8)) {
-                p.store(w, "Calligraphy App - Text Presets");
-            }
+            sb.append("]");
+            Files.writeString(PRESETS_FILE, sb.toString(), StandardCharsets.UTF_8);
         } catch (Exception ignored) {}
     }
-}
+
+    /** JSON 字串讀取：從 {"key":"value",...} 取得指定 key 的值 */
+    private static String jsonString(String obj, String key) {
+        String search = "\"" + key + "\"\s*:\s*\"";
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+            "\"" + java.util.regex.Pattern.quote(key) + "\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
+            .matcher(obj);
+        if (m.find()) {
+            return m.group(1)
+                .replace("\\\"", "\"")
+                .replace("\\\\", "\\")
+                .replace("\\n", "\n")
+                .replace("\\r", "\r")
+                .replace("\\t", "\t");
+        }
+        return null;
+    }
+
+    /** JSON 字串分割：將 top-level {..},{..} 分割成個別 object 字串 */
+    private static List<String> splitJsonObjects(String s) {
+        List<String> list = new ArrayList<>();
+        int depth = 0, start = -1;
+        boolean inStr = false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (inStr) {
+                if (c == '\\') i++;
+                else if (c == '"') inStr = false;
+            } else if (c == '"') {
+                inStr = true;
+            } else if (c == '{') {
+                if (depth++ == 0) start = i;
+            } else if (c == '}') {
+                if (--depth == 0 && start >= 0) {
+                    list.add(s.substring(start, i + 1));
+                    start = -1;
+                }
+            }
+        }
+        return list;
+    }
+
+    /** JSON 字串 escape */
+    private static String jsonEscape(String s) {
+        if (s == null) return "\"\"";
+        return "\"" + s.replace("\\", "\\\\")
+                       .replace("\"", "\\\"")
+                       .replace("\n", "\\n")
+                       .replace("\r", "\\r")
+                       .replace("\t", "\\t") + "\"";
+    }
