@@ -15,12 +15,20 @@ import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStream;
+import java.io.Reader;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 
 /**
@@ -53,6 +61,10 @@ public class MainWindow {
     private ComboBox<String> presetCombo;
     private final LinkedHashMap<String, String> presets = new LinkedHashMap<>();
     private final Set<String> userImportedFonts = new HashSet<>();
+
+    private static final Path APP_DIR     = Path.of(System.getProperty("user.home"), ".calligraphy");
+    private static final Path FONTS_FILE  = APP_DIR.resolve("fonts.properties");
+    private static final Path PRESETS_FILE = APP_DIR.resolve("presets.properties");
 
     // ── 預覽 ──────────────────────────────────────────────────────────
     private TabPane tabPane;
@@ -87,6 +99,8 @@ public class MainWindow {
 
         // 初始預覽
         refreshPreview();
+        // 讀取上次儲存的字型與預設文字
+        loadPersistedData();
     }
 
     // ── 標題列 ────────────────────────────────────────────────────────
@@ -465,6 +479,7 @@ public class MainWindow {
                     presetCombo.getItems().add(name);
                 }
                 presetCombo.setValue(name);
+                persistPresets();
             }
         });
     }
@@ -498,6 +513,7 @@ public class MainWindow {
                 fontCombo.getItems().add(name);
             }
             fontCombo.setValue(name);
+            persistFonts();
         } catch (Exception e) {
             showAlert(Alert.AlertType.ERROR, "匯入失敗", e.getMessage());
         }
@@ -517,6 +533,7 @@ public class MainWindow {
         if (!fontCombo.getItems().isEmpty()) {
             fontCombo.setValue(fontCombo.getItems().get(0));
         }
+        persistFonts();
     }
 
     private void showAlert(Alert.AlertType type, String title, String msg) {
@@ -525,5 +542,86 @@ public class MainWindow {
         a.setHeaderText(null);
         a.setContentText(msg);
         a.showAndWait();
+    }
+
+    // ── 持久化儲存 ────────────────────────────────────────────────────
+
+    private void loadPersistedData() {
+        try { Files.createDirectories(APP_DIR); } catch (Exception ignored) {}
+
+        // 還原匯入字型
+        if (Files.exists(FONTS_FILE)) {
+            Properties p = new Properties();
+            try (Reader r = Files.newBufferedReader(FONTS_FILE, StandardCharsets.UTF_8)) { p.load(r); }
+            catch (Exception ignored) {}
+            int count = Integer.parseInt(p.getProperty("count", "0"));
+            for (int i = 0; i < count; i++) {
+                String name = p.getProperty("font." + i + ".name");
+                String path = p.getProperty("font." + i + ".path");
+                if (name == null || path == null) continue;
+                File f = new File(path);
+                if (!f.exists()) continue;
+                try (FileInputStream fis = new FileInputStream(f)) {
+                    Font loaded = Font.loadFont(fis, 1.0);
+                    if (loaded != null) {
+                        PdfGenerator.BUNDLED_FONTS.put(name, "file:" + path);
+                        previewFontCache.put(name, loaded);
+                        userImportedFonts.add(name);
+                        if (!fontCombo.getItems().contains(name)) fontCombo.getItems().add(name);
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+
+        // 還原文字預設
+        if (Files.exists(PRESETS_FILE)) {
+            Properties p = new Properties();
+            try (Reader r = Files.newBufferedReader(PRESETS_FILE, StandardCharsets.UTF_8)) { p.load(r); }
+            catch (Exception ignored) {}
+            int count = Integer.parseInt(p.getProperty("count", "0"));
+            for (int i = 0; i < count; i++) {
+                String name = p.getProperty("preset." + i + ".name");
+                String text = p.getProperty("preset." + i + ".text", "");
+                if (name == null) continue;
+                presets.put(name, text);
+                if (!presetCombo.getItems().contains(name)) presetCombo.getItems().add(name);
+            }
+        }
+    }
+
+    private void persistFonts() {
+        try {
+            Files.createDirectories(APP_DIR);
+            Properties p = new Properties();
+            List<String> names = new ArrayList<>(userImportedFonts);
+            p.setProperty("count", String.valueOf(names.size()));
+            for (int i = 0; i < names.size(); i++) {
+                String name = names.get(i);
+                String rp = PdfGenerator.BUNDLED_FONTS.get(name);
+                if (rp != null && rp.startsWith("file:")) {
+                    p.setProperty("font." + i + ".name", name);
+                    p.setProperty("font." + i + ".path", rp.substring(5));
+                }
+            }
+            try (Writer w = Files.newBufferedWriter(FONTS_FILE, StandardCharsets.UTF_8)) {
+                p.store(w, "Calligraphy App - User Fonts");
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void persistPresets() {
+        try {
+            Files.createDirectories(APP_DIR);
+            Properties p = new Properties();
+            List<String> names = new ArrayList<>(presets.keySet());
+            p.setProperty("count", String.valueOf(names.size()));
+            for (int i = 0; i < names.size(); i++) {
+                p.setProperty("preset." + i + ".name", names.get(i));
+                p.setProperty("preset." + i + ".text", presets.get(names.get(i)));
+            }
+            try (Writer w = Files.newBufferedWriter(PRESETS_FILE, StandardCharsets.UTF_8)) {
+                p.store(w, "Calligraphy App - Text Presets");
+            }
+        } catch (Exception ignored) {}
     }
 }
