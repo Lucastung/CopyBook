@@ -62,7 +62,16 @@ public class MainWindow {
     private final LinkedHashMap<String, String> presets = new LinkedHashMap<>();
     private final Set<String> userImportedFonts = new HashSet<>();
 
-    private static final Path APP_DIR      = Path.of(System.getProperty("user.home"), ".calligraphy");
+    private static final Path APP_DIR      = resolveAppDir();
+
+    private static Path resolveAppDir() {
+        // Windows → %APPDATA%\Calligraphy；macOS/Linux → ~/.calligraphy
+        String appData = System.getenv("APPDATA");
+        if (appData != null && !appData.isBlank()) {
+            return Path.of(appData, "Calligraphy");
+        }
+        return Path.of(System.getProperty("user.home"), ".calligraphy");
+    }
     private static final Path FONTS_DIR    = APP_DIR.resolve("fonts");
     private static final Path FONTS_FILE   = APP_DIR.resolve("fonts.properties");
     private static final Path PRESETS_FILE = APP_DIR.resolve("presets.json");
