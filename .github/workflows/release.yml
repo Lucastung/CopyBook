@@ -45,9 +45,6 @@ jobs:
   build-windows:
     name: Build Windows EXE
     runs-on: windows-latest
-    defaults:
-      run:
-        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -57,14 +54,67 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Install WiX Toolset
-        run: choco install wixtoolset -y --no-progress
-
       - name: Install Pillow
+        shell: pwsh
         run: pip install pillow
 
-      - name: Run dist.sh (Windows)
-        run: bash release/dist.sh
+      - name: Maven package
+        shell: pwsh
+        run: cd calligraphy-copybook; mvn package -DskipTests
+
+      - name: Extract JavaFX native DLLs
+        shell: pwsh
+        run: |
+          $m2  = "$env:USERPROFILE\.m2\repository\org\openjfx"
+          $ver = "21.0.2"
+          $staging = "release\staging"
+          New-Item -ItemType Directory -Force -Path $staging | Out-Null
+          Copy-Item "calligraphy-copybook\target\calligraphy-copybook-1.0-SNAPSHOT.jar" $staging
+          $jar = "$m2\javafx-graphics\$ver\javafx-graphics-$ver-win.jar"
+          if (-not (Test-Path $jar)) { Write-Error "找不到: $jar"; exit 1 }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($jar)
+          foreach ($entry in $zip.Entries) {
+            if ($entry.Name -like "*.dll") {
+              $dest = Join-Path $staging $entry.Name
+              [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $dest, $true)
+              Write-Host "extracted: $($entry.Name)"
+            }
+          }
+          $zip.Dispose()
+
+      - name: Generate icon.ico
+        shell: python
+        run: |
+          from PIL import Image
+          import os
+          os.makedirs(r"release\icons", exist_ok=True)
+          src = Image.open(r"calligraphy-copybook\src\main\resources\icon.png").convert('RGBA')
+          src.save(r"release\icons\icon.ico", format='ICO',
+                   sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
+          print("icon.ico generated")
+
+      - name: jpackage EXE
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "release\dist" | Out-Null
+          & "$env:JAVA_HOME\bin\jpackage" `
+            --name CalligraphyCopybook `
+            --app-version 1.0.0 `
+            --vendor CalligraphyApp `
+            --description "書法字帖產生器" `
+            --input release\staging `
+            --main-jar calligraphy-copybook-1.0-SNAPSHOT.jar `
+            --main-class com.calligraphy.CalligraphyApp `
+            --dest release\dist `
+            --icon release\icons\icon.ico `
+            --type exe `
+            --win-shortcut `
+            --win-menu `
+            --win-menu-group "書法字帖" `
+            --win-dir-chooser `
+            --win-upgrade-uuid c4f8a1b2-d3e4-4f56-89ab-cd1234ef5678 `
+            --java-options "-Dfile.encoding=UTF-8"
 
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
