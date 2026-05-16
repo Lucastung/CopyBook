@@ -40,6 +40,71 @@
     </dependency>
   </dependencies>
 
+  <!--
+    每個平台的 JavaFX native JAR classifier 不同：
+      macOS ARM  → mac-aarch64
+      macOS x64  → mac
+      Windows    → win
+      Linux      → linux
+
+    Maven OS activation 會自動偵測目前平台，下載對應的 native JAR 到 .m2，
+    讓 dist.sh 可以從 .m2 提取 .dylib / .dll 等 native 函式庫。
+  -->
+  <profiles>
+    <!-- macOS x64（先設定，下面 aarch64 profile 會覆蓋） -->
+    <profile>
+      <id>platform-mac</id>
+      <activation><os><family>mac</family></os></activation>
+      <properties><javafx.platform>mac</javafx.platform></properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.openjfx</groupId><artifactId>javafx-graphics</artifactId>
+          <version>${javafx.version}</version>
+          <classifier>mac</classifier><scope>provided</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+    <!-- macOS Apple Silicon（覆蓋上面的 mac） -->
+    <profile>
+      <id>platform-mac-aarch64</id>
+      <activation><os><family>mac</family><arch>aarch64</arch></os></activation>
+      <properties><javafx.platform>mac-aarch64</javafx.platform></properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.openjfx</groupId><artifactId>javafx-graphics</artifactId>
+          <version>${javafx.version}</version>
+          <classifier>mac-aarch64</classifier><scope>provided</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+    <!-- Windows -->
+    <profile>
+      <id>platform-win</id>
+      <activation><os><family>windows</family></os></activation>
+      <properties><javafx.platform>win</javafx.platform></properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.openjfx</groupId><artifactId>javafx-graphics</artifactId>
+          <version>${javafx.version}</version>
+          <classifier>win</classifier><scope>provided</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+    <!-- Linux -->
+    <profile>
+      <id>platform-linux</id>
+      <activation><os><name>Linux</name></os></activation>
+      <properties><javafx.platform>linux</javafx.platform></properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.openjfx</groupId><artifactId>javafx-graphics</artifactId>
+          <version>${javafx.version}</version>
+          <classifier>linux</classifier><scope>provided</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
+
   <build>
     <plugins>
       <plugin>

@@ -91,16 +91,7 @@ elif [[ "$OS" == MINGW* ]] || [[ "$OS" == MSYS* ]]; then FX_CLS="win";         N
 else                                                      FX_CLS="linux";       NATIVE_EXT="so"
 fi
 info "JavaFX classifier: $FX_CLS"
-
-# 確保 .m2 有當前平台的 JavaFX native JARs（CI 環境 pom.xml 可能用不同 classifier）
-for module in javafx-graphics javafx-base javafx-controls javafx-fxml; do
-    jar_path="$MODULE_DIR/$module/$JAVAFX_VERSION/${module}-${JAVAFX_VERSION}-${FX_CLS}.jar"
-    if [ ! -f "$jar_path" ]; then
-        echo "  下載 ${module} ${FX_CLS} native JAR..."
-        mvn -q dependency:get \
-            -Dartifact="org.openjfx:${module}:${JAVAFX_VERSION}:jar:${FX_CLS}" 2>/dev/null || true
-    fi
-done
+# pom.xml 的 OS profile 會在 mvn package 時自動下載對應 native JARs 到 .m2
 
 # 從 .m2 的 JavaFX JAR 中提取 native 函式庫
 for module in javafx-graphics javafx-base javafx-controls javafx-fxml; do
