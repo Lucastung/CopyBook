@@ -30,9 +30,9 @@ jobs:
           distribution: 'temurin'
 
       - name: Install Pillow
-        run: pip3 install pillow
+        run: python3 -m pip install pillow 2>/dev/null || python3 -m pip install --break-system-packages pillow
 
-      - name: Run dist.sh
+      - name: Run dist.sh (macOS)
         run: bash release/dist.sh
 
       - name: Upload DMG artifact
@@ -60,7 +60,7 @@ jobs:
       - name: Install Pillow
         run: pip install pillow
 
-      - name: Run dist.sh
+      - name: Run dist.sh (Windows)
         run: bash release/dist.sh
 
       - name: Upload EXE artifact
