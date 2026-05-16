@@ -92,10 +92,20 @@ public class MainWindow {
     // ── 標題列 ────────────────────────────────────────────────────────
 
     private HBox buildTitleBar() {
+        // 嘗試用內嵌楷體；若無則 fallback 到系統楷體
+        Font titleFont = null;
+        String kaiPath = PdfGenerator.BUNDLED_FONTS.get("標楷體");
+        if (kaiPath != null) {
+            try (InputStream is = getClass().getResourceAsStream(kaiPath)) {
+                if (is != null) titleFont = Font.loadFont(is, 28);
+            } catch (Exception ignored) {}
+        }
+        if (titleFont == null) titleFont = Font.font("Kai", javafx.scene.text.FontPosture.ITALIC, 28);
         Label title = new Label("只是想寫寫字");
-        title.setStyle("-fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: #2c1a0e; -fx-font-family: 'Serif';");
+        title.setFont(titleFont);
+        title.setStyle("-fx-font-size: 26px; -fx-font-style: italic; -fx-text-fill: #2c1a0e;");
         HBox bar = new HBox(title);
-        bar.setAlignment(Pos.CENTER);
+        bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(14, 20, 14, 20));
         bar.setStyle("-fx-background-color: #d4b896; -fx-border-color: #b8966a; -fx-border-width: 0 0 2 0;");
         return bar;
