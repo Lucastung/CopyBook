@@ -58,6 +58,10 @@ jobs:
         shell: pwsh
         run: pip install pillow
 
+      - name: Install WiX Toolset
+        shell: pwsh
+        run: choco install wixtoolset -y --no-progress
+
       - name: Maven package
         shell: pwsh
         run: cd calligraphy-copybook; mvn package -DskipTests
@@ -126,6 +130,8 @@ jobs:
   create-release:
     name: Create GitHub Release
     needs: [build-macos, build-windows]
+    # macOS 成功就發布，Windows 失敗也不阻擋
+    if: always() && needs.build-macos.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -138,6 +144,8 @@ jobs:
 
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
+        # Windows build 失敗時此步驟會跳過，但不影響 Release 發布
+        if: needs.build-windows.result == 'success'
         with:
           name: windows-exe
           path: artifacts/
