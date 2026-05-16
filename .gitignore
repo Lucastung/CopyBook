@@ -1,0 +1,13 @@
+# Maven build output
+calligraphy-copybook/target/
+
+# Packaging temp files
+release/staging/
+release/dist/
+release/icons/*.icns
+release/icons/*.ico
+release/icons/icon.iconset/
+
+# macOS
+.DS_Store
+**/.DS_Store

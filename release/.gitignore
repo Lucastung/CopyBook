@@ -1,0 +1,4 @@
+staging/
+dist/
+icons/*.icns
+icons/*.ico

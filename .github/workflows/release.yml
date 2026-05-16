@@ -1,0 +1,104 @@
+# ══════════════════════════════════════════════════════════════════
+#  書法字帖產生器 — 自動發布 CI/CD
+#
+#  觸發方式：推送 tag，例如 git tag v1.0.0 && git push origin v1.0.0
+#  結果：自動在 GitHub Releases 建立頁面，附上 macOS .dmg 和 Windows .exe
+# ══════════════════════════════════════════════════════════════════
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  # ── macOS build ─────────────────────────────────────────────────
+  build-macos:
+    name: Build macOS DMG
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Install Pillow
+        run: pip3 install pillow
+
+      - name: Run dist.sh
+        run: bash release/dist.sh
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: release/dist/*.dmg
+
+  # ── Windows build ────────────────────────────────────────────────
+  build-windows:
+    name: Build Windows EXE
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Install Pillow
+        run: pip install pillow
+
+      - name: Run dist.sh
+        run: bash release/dist.sh
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: release/dist/*.exe
+
+  # ── 建立 GitHub Release ─────────────────────────────────────────
+  create-release:
+    name: Create GitHub Release
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-dmg
+          path: artifacts/
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-exe
+          path: artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "只是想寫寫字 ${{ github.ref_name }}"
+          body: |
+            ## 安裝說明
+            - **macOS**：下載 `.dmg`，雙擊後拖拉 App 到 Applications
+            - **Windows**：下載 `.exe`，雙擊後按指示完成安裝
+
+            > 安裝包已內嵌 Java 執行環境，無需另外安裝 Java。
+          files: artifacts/*
+          draft: false
+          prerelease: false
