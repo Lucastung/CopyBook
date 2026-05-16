@@ -6,7 +6,7 @@ package com.calligraphy;
 public class CopybookConfig {
 
     /** 格子大小（公釐） */
-    private double cellSizeMm = 20.0;
+    private double cellSizeMm = 16.0;
 
     /** 字體名稱（顯示名稱，對應 PdfGenerator.BUNDLED_FONTS 的 key） */
     private String fontFamily = "";

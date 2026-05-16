@@ -19,10 +19,32 @@ set -euo pipefail
 # ── 應用程式設定 ──────────────────────────────────────────────────
 APP_NAME="CalligraphyCopybook"          # 安裝包檔名（英文，無空格）
 APP_DISPLAY_NAME="只是想寫寫字"         # macOS 顯示名稱
-APP_VERSION="1.0.0"
+
+# 從 git tag 讀取版本號（格式 v1.2.3 → 1.2.3），或自動從 pom.xml 取得
+_git_tag="$(git -C "$(dirname "${BASH_SOURCE[0]}")" describe --tags --exact-match 2>/dev/null || true)"
+if [[ "$_git_tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+    APP_VERSION="${BASH_REMATCH[1]}"
+elif [[ "$_git_tag" =~ ^v([0-9]+\.[0-9]+)$ ]]; then
+    APP_VERSION="${BASH_REMATCH[1]}.0"
+else
+    # 沒有精確 tag，從 pom.xml 讀取（去掉 -SNAPSHOT）
+    _pom_ver="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && mvn help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null)"
+    APP_VERSION="${_pom_ver//-SNAPSHOT/}"
+    APP_VERSION="${APP_VERSION:-1.0.0}"
+fi
+
 MAIN_CLASS="com.calligraphy.App"
 MAIN_JAR="calligraphy-copybook-1.0-SNAPSHOT.jar"
 JAVAFX_VERSION="21.0.2"
+
+# jpackage 要求版本號第一位 >= 1；若 APP_VERSION 以 0 開頭，暫時加 1 供 jpackage 使用，
+# 打包完成後再把輸出檔案改回正確名稱。
+_major="$(echo "$APP_VERSION" | cut -d. -f1)"
+if [[ "$_major" -lt 1 ]]; then
+    JPACKAGE_VERSION="1.$(echo "$APP_VERSION" | cut -d. -f2-)"
+else
+    JPACKAGE_VERSION="$APP_VERSION"
+fi
 
 # ── 路徑 ──────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -168,7 +190,7 @@ rm -f "$DIST"/${APP_NAME}*.dmg \
 
 JPACKAGE_COMMON=(
     --name          "$APP_NAME"
-    --app-version   "$APP_VERSION"
+    --app-version   "$JPACKAGE_VERSION"
     --vendor        "CalligraphyApp"
     --description   "書法字帖產生器"
     --input         "$STAGING"
@@ -186,6 +208,11 @@ if [ "$OS" = "Darwin" ]; then
         --mac-package-name "$APP_DISPLAY_NAME" \
         --java-options  "-Xdock:name=$APP_DISPLAY_NAME" \
         --java-options  "-Xdock:icon=\$APPDIR/../Resources/$APP_NAME.icns"
+    # 如果 JPACKAGE_VERSION 與 APP_VERSION 不同，把檔案改回正確名稱
+    if [[ "$JPACKAGE_VERSION" != "$APP_VERSION" ]]; then
+        mv -f "$DIST/${APP_NAME}-${JPACKAGE_VERSION}.dmg" \
+              "$DIST/${APP_NAME}-${APP_VERSION}.dmg" 2>/dev/null || true
+    fi
 
 elif [[ "$OS" == MINGW* ]] || [[ "$OS" == MSYS* ]]; then
     "$JPACKAGE" "${JPACKAGE_COMMON[@]}" \
