@@ -20,7 +20,7 @@ set -euo pipefail
 APP_NAME="CalligraphyCopybook"          # 安裝包檔名（英文，無空格）
 APP_DISPLAY_NAME="只是想寫寫字"         # macOS 顯示名稱
 APP_VERSION="1.0.0"
-MAIN_CLASS="com.calligraphy.CalligraphyApp"
+MAIN_CLASS="com.calligraphy.App"
 MAIN_JAR="calligraphy-copybook-1.0-SNAPSHOT.jar"
 JAVAFX_VERSION="21.0.2"
 

@@ -118,7 +118,7 @@ jobs:
             --description    "Calligraphy Copybook Generator" `
             --input          release\staging `
             --main-jar       calligraphy-copybook-1.0-SNAPSHOT.jar `
-            --main-class     com.calligraphy.CalligraphyApp `
+            --main-class     com.calligraphy.App `
             --dest           release\dist `
             --icon           release\icons\icon.ico `
             --type           msi `
