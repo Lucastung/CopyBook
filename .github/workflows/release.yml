@@ -101,30 +101,42 @@ jobs:
       - name: jpackage EXE
         shell: pwsh
         run: |
+          # 強制 PowerShell 使用 UTF-8（避免中文參數亂碼）
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          $env:JAVA_TOOL_OPTIONS = "-Dfile.encoding=UTF-8"
+
           New-Item -ItemType Directory -Force -Path "release\dist" | Out-Null
-          & "$env:JAVA_HOME\bin\jpackage" `
-            --name CalligraphyCopybook `
-            --app-version 1.0.0 `
-            --vendor CalligraphyApp `
-            --description "書法字帖產生器" `
-            --input release\staging `
-            --main-jar calligraphy-copybook-1.0-SNAPSHOT.jar `
-            --main-class com.calligraphy.CalligraphyApp `
-            --dest release\dist `
-            --icon release\icons\icon.ico `
-            --type exe `
+
+          # 找 jpackage 位置（優先用 JAVA_HOME，備援用 PATH）
+          $jp = if ($env:JAVA_HOME) { Join-Path $env:JAVA_HOME "bin\jpackage.exe" } else { "jpackage" }
+          Write-Host "jpackage: $jp"
+
+          & $jp `
+            --name           CalligraphyCopybook `
+            --app-version    1.0.0 `
+            --vendor         CalligraphyApp `
+            --description    "Calligraphy Copybook Generator" `
+            --input          release\staging `
+            --main-jar       calligraphy-copybook-1.0-SNAPSHOT.jar `
+            --main-class     com.calligraphy.CalligraphyApp `
+            --dest           release\dist `
+            --icon           release\icons\icon.ico `
+            --type           msi `
             --win-shortcut `
             --win-menu `
-            --win-menu-group "書法字帖" `
+            --win-menu-group Calligraphy `
             --win-dir-chooser `
             --win-upgrade-uuid c4f8a1b2-d3e4-4f56-89ab-cd1234ef5678 `
-            --java-options "-Dfile.encoding=UTF-8"
+            --java-options   "-Dfile.encoding=UTF-8"
 
-      - name: Upload EXE artifact
+          Write-Host "jpackage exit code: $LASTEXITCODE"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload MSI artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-exe
-          path: release/dist/*.exe
+          path: release/dist/*.msi
 
   # ── 建立 GitHub Release ─────────────────────────────────────────
   create-release:
